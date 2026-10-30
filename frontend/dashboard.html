@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Attendance Dashboard</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 950px; margin: 30px auto; padding: 0 15px; color: #222; }
+    h1 { color: #1f3a6e; margin-bottom: 5px; }
+    h2 { color: #1f3a6e; border-bottom: 2px solid #1f3a6e; padding-bottom: 4px; margin-top: 30px; }
+    nav a { color: #1f3a6e; margin-right: 15px; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+    select, input { padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+    button { padding: 8px 14px; border: none; border-radius: 4px; cursor: pointer; background: #1f3a6e; color: #fff; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background: #f0f3f8; }
+    .badge { padding: 3px 10px; border-radius: 12px; color: #fff; font-size: 13px; }
+    .ok { background: #27ae60; }
+    .bad { background: #c0392b; }
+    tr.notEligible { background: #fdecea; }
+    #msg { margin: 10px 0; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>Attendance &amp; Grade Dashboard</h1>
+  <nav><a href="index.html">Students</a><a href="dashboard.html">Dashboard</a></nav>
+  <div id="msg"></div>
+
+  <h2>1. Select Student</h2>
+  <div class="row">
+    <select id="studentSelect"></select>
+  </div>
+
+  <h2>2. Mark Attendance</h2>
+  <form id="attendanceForm" class="row">
+    <input type="date" id="attDate" required>
+    <select id="attStatus">
+      <option value="true">Present</option>
+      <option value="false">Absent</option>
+    </select>
+    <button type="submit">Save Attendance</button>
+  </form>
+
+  <h2>3. Add Marks</h2>
+  <form id="gradeForm" class="row">
+    <input id="subject" placeholder="Subject" required>
+    <input id="marks" type="number" min="0" max="100" placeholder="Marks (0-100)" required>
+    <button type="submit">Save Marks</button>
+  </form>
+
+  <h2>4. Eligibility Report</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Roll No</th><th>Name</th><th>Total Classes</th><th>Present</th>
+        <th>Attendance %</th><th>Exam Eligibility</th><th>Avg Marks</th><th>Grade</th>
+      </tr>
+    </thead>
+    <tbody id="reportTable"></tbody>
+  </table>
+
+  <script>
+    const API = "http://localhost:8080/api";
+
+    function showMsg(text, ok = true) {
+      const el = document.getElementById("msg");
+      el.textContent = text;
+      el.style.color = ok ? "#27ae60" : "#c0392b";
+      setTimeout(() => el.textContent = "", 3000);
+    }
+
+    async function loadStudents() {
+      const res = await fetch(`${API}/students`);
+      const students = await res.json();
+      const select = document.getElementById("studentSelect");
+      select.innerHTML = "";
+      students.forEach(s => {
+        const opt = document.createElement("option");
+        opt.value = s.id;
+        opt.textContent = `${s.rollNo} - ${s.name}`;
+        select.appendChild(opt);
+      });
+    }
+
+    async function loadReport() {
+      const res = await fetch(`${API}/reports`);
+      const reports = await res.json();
+      const tbody = document.getElementById("reportTable");
+      tbody.innerHTML = "";
+      reports.forEach(r => {
+        const tr = document.createElement("tr");
+        if (!r.eligible) tr.className = "notEligible";
+        tr.innerHTML = `
+          <td>${r.rollNo}</td>
+          <td>${r.name}</td>
+          <td>${r.totalClasses}</td>
+          <td>${r.presentClasses}</td>
+          <td>${r.attendancePercentage}%</td>
+          <td><span class="badge ${r.eligible ? "ok" : "bad"}">${r.eligible ? "Eligible" : "Not Eligible"}</span></td>
+          <td>${r.averageMarks}</td>
+          <td><b>${r.grade}</b></td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    document.getElementById("attendanceForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const body = {
+        studentId: Number(document.getElementById("studentSelect").value),
+        date: document.getElementById("attDate").value,
+        present: document.getElementById("attStatus").value === "true"
+      };
+      const res = await fetch(`${API}/attendance`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      showMsg(res.ok ? "Attendance saved" : "Failed to save attendance", res.ok);
+      loadReport();
+    });
+
+    document.getElementById("gradeForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const body = {
+        studentId: Number(document.getElementById("studentSelect").value),
+        subject: document.getElementById("subject").value,
+        marks: Number(document.getElementById("marks").value)
+      };
+      const res = await fetch(`${API}/grades`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      showMsg(res.ok ? "Marks saved" : "Failed to save marks", res.ok);
+      e.target.reset();
+      loadReport();
+    });
+
+    document.getElementById("attDate").valueAsDate = new Date();
+    loadStudents();
+    loadReport();
+  </script>
+</body>
+</html>
